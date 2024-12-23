@@ -1,6 +1,10 @@
 // hooks/useTaskManager.js
 import { useState, useEffect } from 'react';
 import { db } from '../services/db';
+import { REWARD_DELAY_SECONDS } from '../config/constants';
+
+const REWARD_XP = 5;
+const REWARD_COINS = 5;
 
 export const useTaskManager = () => {
   const [tasks, setTasks] = useState([]);
@@ -77,9 +81,31 @@ export const useTaskManager = () => {
       const task = tasks.find(t => t.id === taskId);
       if (!task || task.rewarded) return;
 
-      const hoursSinceCompletion = (Date.now() - task.completedAt) / (1000 * 60 * 60);
-      if (hoursSinceCompletion < 12) return;
+      const secondsSinceCompletion = (Date.now() - task.completedAt) / 1000;
+      if (secondsSinceCompletion < REWARD_DELAY_SECONDS) return;
 
+      // Get current user data
+      const userData = await db.getUserData();
+      const currentCoins = userData?.coins || 0;
+
+      // Update user coins
+      await db.updateUserData({
+        ...userData,
+        coins: currentCoins + REWARD_COINS
+      });
+
+      // Get subject data and update XP
+      const subjects = await db.getSubjects();
+      const subject = subjects.find(s => s.name === task.subject);
+      
+      if (subject) {
+        await db.updateSubject({
+          ...subject,
+          experience: (subject.experience || 0) + REWARD_XP
+        });
+      }
+
+      // Mark task as rewarded
       const updatedTask = {
         ...task,
         rewarded: true
@@ -89,7 +115,12 @@ export const useTaskManager = () => {
       setTasks(prevTasks => 
         prevTasks.map(t => t.id === taskId ? updatedTask : t)
       );
-      return updatedTask;
+
+      return {
+        task: updatedTask,
+        rewardedCoins: REWARD_COINS,
+        rewardedXP: REWARD_XP
+      };
     } catch (err) {
       setError('Failed to collect reward');
       console.error(err);
@@ -159,8 +190,6 @@ export const useTaskManager = () => {
       throw err;
     }
   };
-  
-
 
   return {
     tasks,

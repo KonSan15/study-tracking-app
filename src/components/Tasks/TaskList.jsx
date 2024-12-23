@@ -1,9 +1,12 @@
 // components/Tasks/TaskList.jsx
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Clock, Coins } from 'lucide-react';
 import { TaskForm } from './TaskForm';
 import { TaskMenu } from './TaskMenu';
+import RewardProgress from './RewardProgress';
+import RewardAlert from './RewardAlert';
 import { useTaskManager } from '../../hooks/useTaskManager';
+import { calculateRewardProgress } from '../../config/constants';
 
 export const TaskList = ({ onDataChange }) => {
   const {
@@ -17,74 +20,80 @@ export const TaskList = ({ onDataChange }) => {
   } = useTaskManager();
 
   const [filter, setFilter] = useState('all');
+  const [rewardAlert, setRewardAlert] = useState(null);
 
-  // Add effect to refresh tasks when component mounts
-  useEffect(() => {
-    console.log('TaskList mounted, refreshing tasks');
-    refreshTasks();
-  }, []);
-
-  const filteredTasks = tasks.filter(task => {
-    switch (filter) {
-      case 'active':
-        return !task.completed;
-      case 'completed':
-        return task.completed;
-      case 'review':
-        return task.requiresReview && 
-               task.nextReviewDate && 
-               task.nextReviewDate <= Date.now();
-      default:
-        return true;
+  // Organize tasks into categories
+  const organizedTasks = tasks.reduce((acc, task) => {
+    if (!task.completed) {
+      acc.notCompleted.push(task);
+    } else if (!task.rewarded) {
+      const progress = calculateRewardProgress(task.completedAt);
+      if (progress >= 100) {
+        acc.readyToCollect.push(task);
+      } else {
+        acc.waitingForReward.push(task);
+      }
+    } else {
+      acc.fullyCompleted.push(task);
     }
+    return acc;
+  }, {
+    readyToCollect: [],
+    notCompleted: [],
+    waitingForReward: [],
+    fullyCompleted: []
   });
 
-  const canCollectReward = (task) => {
-    if (!task.completed || task.rewarded) return false;
-    const hoursSinceCompletion = (Date.now() - task.completedAt) / (1000 * 60 * 60);
-    return hoursSinceCompletion >= 12;
+  // Sort each category by most recent first
+  organizedTasks.readyToCollect.sort((a, b) => b.completedAt - a.completedAt);
+  organizedTasks.notCompleted.sort((a, b) => b.createdAt - a.createdAt);
+  organizedTasks.waitingForReward.sort((a, b) => b.completedAt - a.completedAt);
+  organizedTasks.fullyCompleted.sort((a, b) => b.completedAt - a.completedAt);
+
+  // Filter tasks based on current filter
+  const filterTasks = (taskList) => {
+    return taskList.filter(task => {
+      switch (filter) {
+        case 'active':
+          return !task.completed;
+        case 'completed':
+          return task.completed;
+        case 'review':
+          return task.requiresReview && 
+                 task.nextReviewDate && 
+                 task.nextReviewDate <= Date.now();
+        default:
+          return true;
+      }
+    });
   };
 
-  if (loading) {
+  const handleCollectReward = async (taskId) => {
+    try {
+      const result = await collectReward(taskId);
+      if (result) {
+        setRewardAlert({
+          task: result.task,
+          coins: result.rewardedCoins,
+          xp: result.rewardedXP
+        });
+        
+        setTimeout(() => setRewardAlert(null), 3000);
+        onDataChange?.();
+      }
+    } catch (err) {
+      console.error('Failed to collect reward:', err);
+    }
+  };
+
+  const renderTaskGroup = (tasks, groupTitle) => {
+    if (tasks.length === 0) return null;
+
     return (
-      <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 text-red-600 px-4 py-3 rounded-md">
-        {error}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex gap-6">
-      {/* Task List Section */}
-      <div className="flex-1">
-        {/* Filter tabs */}
-        <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
-          {['all', 'active', 'completed', 'review'].map((filterType) => (
-            <button
-              key={filterType}
-              onClick={() => setFilter(filterType)}
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium capitalize transition-colors ${
-                filter === filterType 
-                  ? 'bg-white text-blue-600 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {filterType}
-            </button>
-          ))}
-        </div>
-
-        {/* Task list */}
+      <div className="mb-6">
+        <h2 className="text-sm font-medium text-gray-500 mb-3">{groupTitle}</h2>
         <div className="space-y-3">
-          {filteredTasks.map(task => (
+          {tasks.map(task => (
             <div key={task.id} className="bg-white rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors">
               <div className="flex justify-between items-start">
                 <div className="flex-1 mr-4">
@@ -107,30 +116,25 @@ export const TaskList = ({ onDataChange }) => {
                   <TaskMenu task={task} onDataChange={onDataChange} />
                   {!task.completed ? (
                     <button
-                      onClick={() => {
-                        completeTask(task.id);
-                        onDataChange?.();
-                      }}
+                      onClick={() => completeTask(task.id)}
                       className="bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 text-sm font-medium transition-colors"
                     >
                       Complete
                     </button>
                   ) : !task.rewarded ? (
-                    <button
-                      onClick={() => {
-                        collectReward(task.id);
-                        onDataChange?.();
-                      }}
-                      disabled={!canCollectReward(task)}
-                      className={`flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        canCollectReward(task)
-                          ? 'bg-yellow-500 text-white hover:bg-yellow-600'
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      <Clock className="w-4 h-4 mr-1.5" />
-                      {canCollectReward(task) ? 'Collect Reward' : 'Wait 12h'}
-                    </button>
+                    <div className="min-w-[200px]">
+                      {calculateRewardProgress(task.completedAt) < 100 ? (
+                        <RewardProgress completedAt={task.completedAt} />
+                      ) : (
+                        <button
+                          onClick={() => handleCollectReward(task.id)}
+                          className="w-full flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-medium bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
+                        >
+                          <Coins className="w-4 h-4 mr-1.5" />
+                          Collect Reward
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <div className="flex items-center text-green-600">
                       <CheckCircle2 className="w-5 h-5" />
@@ -152,13 +156,53 @@ export const TaskList = ({ onDataChange }) => {
               </div>
             </div>
           ))}
-
-          {filteredTasks.length === 0 && (
-            <div className="text-center py-12 bg-gray-50 rounded-lg">
-              <p className="text-gray-500">No tasks found</p>
-            </div>
-          )}
         </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex gap-6">
+      {/* Task List Section */}
+      <div className="flex-1">
+        {rewardAlert && (
+          <RewardAlert
+            task={rewardAlert.task}
+            xp={rewardAlert.xp}
+            coins={rewardAlert.coins}
+            onClose={() => setRewardAlert(null)}
+          />
+        )}
+
+        {/* Filter tabs */}
+        <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
+          {['all', 'active', 'completed', 'review'].map((filterType) => (
+            <button
+              key={filterType}
+              onClick={() => setFilter(filterType)}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium capitalize transition-colors ${
+                filter === filterType 
+                  ? 'bg-white text-blue-600 shadow-sm' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {filterType}
+            </button>
+          ))}
+        </div>
+
+        {/* Organized task groups */}
+        {renderTaskGroup(filterTasks(organizedTasks.readyToCollect), "Ready to Collect")}
+        {renderTaskGroup(filterTasks(organizedTasks.notCompleted), "In Progress")}
+        {renderTaskGroup(filterTasks(organizedTasks.waitingForReward), "Waiting for Reward")}
+        {renderTaskGroup(filterTasks(organizedTasks.fullyCompleted), "Completed")}
+
+        {/* Empty state */}
+        {Object.values(organizedTasks).every(group => filterTasks(group).length === 0) && (
+          <div className="text-center py-12 bg-gray-50 rounded-lg">
+            <p className="text-gray-500">No tasks found</p>
+          </div>
+        )}
       </div>
 
       {/* Task Form Section */}
