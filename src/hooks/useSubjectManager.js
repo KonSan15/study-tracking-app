@@ -69,9 +69,37 @@ export const useSubjectManager = () => {
     const subject = subjects.find(s => s.name === subjectName);
     if (!subject) return null;
 
-    const level = Math.floor(subject.experience / 100);
-    const progress = subject.experience % 100;
-    const experienceToNextLevel = 100 - progress;
+
+    const level = (() => {
+        if (subject.experience <= 100) {
+            return 1;
+        } else if (subject.experience <= 300) {
+            return 2;
+        } else {
+            return 3;
+        }
+    })();
+    
+    const progress = (() => {
+        if (level === 1) {
+            return subject.experience; // Progress within level 1
+        } else if (level === 2) {
+            return subject.experience - 100; // Progress within level 2
+        } else {
+            return subject.experience - 300; // Progress within level 3
+        }
+    })();
+    
+    const experienceToNextLevel = (() => {
+        if (level === 1) {
+            return 100 - progress; // Remaining experience for level 2
+        } else if (level === 2) {
+            return 200 - progress; // Remaining experience for level 3
+        } else {
+            return 0; // Max level reached
+        }
+    })();
+    
 
     return {
       level,
