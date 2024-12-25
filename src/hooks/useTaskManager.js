@@ -6,6 +6,18 @@ import { REWARD_DELAY_SECONDS } from '../config/constants';
 const REWARD_XP = 5;
 const REWARD_COINS = 5;
 
+const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+const MONTH_IN_MS = 30 * 24 * 60 * 60 * 1000;
+
+const getNextReviewDate = (daysToAdd) => {
+  const date = new Date();
+  date.setDate(date.getDate() + daysToAdd);
+  // Set to start of the day (midnight)
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+};
+
+
 export const useTaskManager = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +52,8 @@ export const useTaskManager = () => {
         rewarded: false,
         requiresReview: taskData.requiresReview,
         createdAt: Date.now(),
-        nextReviewDate: taskData.requiresReview ? Date.now() + (7 * 24 * 60 * 60 * 1000) : null
+        nextReviewDate: taskData.requiresReview ? getNextReviewDate(1) : null,
+        reviewCycle: taskData.requiresReview ? 1 : null // 1 = first review (week), 2 = second review (month)
       };
 
       await db.addTask(task);
@@ -75,6 +88,7 @@ export const useTaskManager = () => {
       throw err;
     }
   };
+  
 
   const collectReward = async (taskId) => {
     try {
@@ -135,7 +149,10 @@ export const useTaskManager = () => {
 
       const updatedTask = {
         ...task,
-        nextReviewDate: Date.now() + (7 * 24 * 60 * 60 * 1000)
+        nextReviewDate: task.reviewCycle === 1 
+          ? getNextReviewDate(30)  // Second review after a month
+          : null,  // No more reviews after second review
+        reviewCycle: task.reviewCycle === 1 ? 2 : null // Update or clear review cycle
       };
 
       await db.updateTask(updatedTask);
@@ -149,6 +166,7 @@ export const useTaskManager = () => {
       throw err;
     }
   };
+
 
   const getTasksDueForReview = () => {
     return tasks.filter(task => 

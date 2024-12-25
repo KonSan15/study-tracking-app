@@ -8,6 +8,13 @@ import RewardAlert from './RewardAlert';
 import { useTaskManager } from '../../hooks/useTaskManager';
 import { calculateRewardProgress } from '../../config/constants';
 
+const formatReviewDate = (date, cycle) => {
+  if (!date) return '';
+  const formattedDate = new Date(date).toLocaleDateString();
+  const reviewType = cycle === 1 ? 'Weekly' : 'Monthly';
+  return `${reviewType} review: ${formattedDate}`;
+};
+
 export const TaskList = ({ onDataChange }) => {
   const {
     tasks,
@@ -102,11 +109,11 @@ export const TaskList = ({ onDataChange }) => {
                     <span className="text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                       {task.subject}
                     </span>
-                    {task.requiresReview && (
+                    {task.requiresReview && task.nextReviewDate && (
                       <div className="flex items-center text-blue-600">
                         <Clock className="w-4 h-4 mr-1" />
                         <span className="text-sm">
-                          Next review: {new Date(task.nextReviewDate).toLocaleDateString()}
+                          {formatReviewDate(task.nextReviewDate, task.reviewCycle)}
                         </span>
                       </div>
                     )}
@@ -141,7 +148,7 @@ export const TaskList = ({ onDataChange }) => {
                     </div>
                   )}
                   
-                  {task.requiresReview && task.nextReviewDate <= Date.now() && (
+                  {task.requiresReview && task.nextReviewDate && task.nextReviewDate <= Date.now() && (
                     <button
                       onClick={() => {
                         updateTaskReview(task.id);
