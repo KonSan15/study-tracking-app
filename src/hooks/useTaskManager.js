@@ -52,7 +52,7 @@ export const useTaskManager = () => {
         rewarded: false,
         requiresReview: taskData.requiresReview,
         createdAt: Date.now(),
-        nextReviewDate: taskData.requiresReview ? getNextReviewDate(1) : null,
+        nextReviewDate: null,
         reviewCycle: taskData.requiresReview ? 1 : null // 1 = first review (week), 2 = second review (month)
       };
 
@@ -122,7 +122,9 @@ export const useTaskManager = () => {
       // Mark task as rewarded
       const updatedTask = {
         ...task,
-        rewarded: true
+        rewarded: true,
+
+        nextReviewDate: task.requiresReview ? getNextReviewDate(7) : null
       };
 
       await db.updateTask(updatedTask);
