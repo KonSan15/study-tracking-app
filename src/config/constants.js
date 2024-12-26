@@ -2,7 +2,7 @@
 
 // Default is 12 hours in seconds (12 * 60 * 60)
 // 43200 seconds in 12 hours
-export const REWARD_DELAY_SECONDS = 60;
+export const REWARD_DELAY_SECONDS = 43200;
 
 export const calculateRewardProgress = (completedAt) => {
   if (!completedAt) return 0;

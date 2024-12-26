@@ -5,9 +5,8 @@ import { REWARD_DELAY_SECONDS } from '../config/constants';
 
 const REWARD_XP = 5;
 const REWARD_COINS = 5;
-
-const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
-const MONTH_IN_MS = 30 * 24 * 60 * 60 * 1000;
+const REVIEW_REWARD_XP = 10;
+const REVIEW_REWARD_COINS = 10;
 
 const getNextReviewDate = (daysToAdd) => {
   const date = new Date();
@@ -16,7 +15,6 @@ const getNextReviewDate = (daysToAdd) => {
   date.setHours(0, 0, 0, 0);
   return date.getTime();
 };
-
 
 export const useTaskManager = () => {
   const [tasks, setTasks] = useState([]);
@@ -53,7 +51,7 @@ export const useTaskManager = () => {
         requiresReview: taskData.requiresReview,
         createdAt: Date.now(),
         nextReviewDate: null,
-        reviewCycle: taskData.requiresReview ? 1 : null // 1 = first review (week), 2 = second review (month)
+        reviewCycle: taskData.requiresReview ? 1 : null
       };
 
       await db.addTask(task);
@@ -88,7 +86,6 @@ export const useTaskManager = () => {
       throw err;
     }
   };
-  
 
   const collectReward = async (taskId) => {
     try {
@@ -119,11 +116,9 @@ export const useTaskManager = () => {
         });
       }
 
-      // Mark task as rewarded
       const updatedTask = {
         ...task,
         rewarded: true,
-
         nextReviewDate: task.requiresReview ? getNextReviewDate(7) : null
       };
 
@@ -151,10 +146,10 @@ export const useTaskManager = () => {
 
       const updatedTask = {
         ...task,
-        nextReviewDate: task.reviewCycle === 1 
-          ? getNextReviewDate(30)  // Second review after a month
-          : null,  // No more reviews after second review
-        reviewCycle: task.reviewCycle === 1 ? 2 : null // Update or clear review cycle
+        reviewCompletedAt: Date.now(),
+        reviewRewarded: false,
+        nextReviewDate: null,
+        isInReviewWaiting: true
       };
 
       await db.updateTask(updatedTask);
@@ -169,12 +164,66 @@ export const useTaskManager = () => {
     }
   };
 
+  const collectReviewReward = async (taskId) => {
+    try {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task || !task.isInReviewWaiting || task.reviewRewarded) return;
+
+      const secondsSinceReview = (Date.now() - task.reviewCompletedAt) / 1000;
+      if (secondsSinceReview < REWARD_DELAY_SECONDS) return;
+
+      // Get current user data
+      const userData = await db.getUserData();
+      const currentCoins = userData?.coins || 0;
+
+      // Update user coins
+      await db.updateUserData({
+        ...userData,
+        coins: currentCoins + REVIEW_REWARD_COINS
+      });
+
+      // Get subject data and update XP
+      const subjects = await db.getSubjects();
+      const subject = subjects.find(s => s.name === task.subject);
+      
+      if (subject) {
+        await db.updateSubject({
+          ...subject,
+          experience: (subject.experience || 0) + REVIEW_REWARD_XP
+        });
+      }
+
+      const updatedTask = {
+        ...task,
+        reviewRewarded: true,
+        isInReviewWaiting: false,
+        nextReviewDate: task.reviewCycle === 1 ? getNextReviewDate(30) : null,
+        reviewCycle: task.reviewCycle === 1 ? 2 : null
+      };
+
+      await db.updateTask(updatedTask);
+      setTasks(prevTasks => 
+        prevTasks.map(t => t.id === taskId ? updatedTask : t)
+      );
+
+      return {
+        task: updatedTask,
+        rewardedCoins: REVIEW_REWARD_COINS,
+        rewardedXP: REVIEW_REWARD_XP
+      };
+    } catch (err) {
+      setError('Failed to collect review reward');
+      console.error(err);
+      throw err;
+    }
+  };
 
   const getTasksDueForReview = () => {
     return tasks.filter(task => 
       task.requiresReview && 
       task.nextReviewDate && 
-      task.nextReviewDate <= Date.now()
+      task.nextReviewDate <= Date.now() &&
+      !task.isInReviewWaiting
     );
   };
 
@@ -222,6 +271,7 @@ export const useTaskManager = () => {
     getTasksDueForReview,
     refreshTasks: loadTasks,
     updateTask,
-    deleteTask
+    deleteTask,
+    collectReviewReward
   };
 };

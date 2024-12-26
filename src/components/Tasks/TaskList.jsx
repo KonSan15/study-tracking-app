@@ -23,6 +23,7 @@ export const TaskList = ({ onDataChange }) => {
     completeTask,
     collectReward,
     updateTaskReview,
+    collectReviewReward,  // Add new function
     refreshTasks
   } = useTaskManager();
 
@@ -75,9 +76,12 @@ export const TaskList = ({ onDataChange }) => {
     });
   };
 
-  const handleCollectReward = async (taskId) => {
+  const handleCollectReward = async (taskId, isReviewReward = false) => {
     try {
-      const result = await collectReward(taskId);
+      const result = isReviewReward 
+        ? await collectReviewReward(taskId)
+        : await collectReward(taskId);
+        
       if (result) {
         setRewardAlert({
           task: result.task,
@@ -89,7 +93,7 @@ export const TaskList = ({ onDataChange }) => {
         onDataChange?.();
       }
     } catch (err) {
-      console.error('Failed to collect reward:', err);
+      console.error(`Failed to collect ${isReviewReward ? 'review ' : ''}reward:`, err);
     }
   };
 
@@ -109,11 +113,15 @@ export const TaskList = ({ onDataChange }) => {
                     <span className="text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                       {task.subject}
                     </span>
-                    {task.requiresReview && task.nextReviewDate && (
+                    {task.requiresReview && (
                       <div className="flex items-center text-blue-600">
                         <Clock className="w-4 h-4 mr-1" />
                         <span className="text-sm">
-                          {formatReviewDate(task.nextReviewDate, task.reviewCycle)}
+                          {task.isInReviewWaiting 
+                            ? "Review in progress" 
+                            : task.nextReviewDate
+                              ? formatReviewDate(task.nextReviewDate, task.reviewCycle)
+                              : "For Review"}
                         </span>
                       </div>
                     )}
@@ -134,7 +142,7 @@ export const TaskList = ({ onDataChange }) => {
                         <RewardProgress completedAt={task.completedAt} />
                       ) : (
                         <button
-                          onClick={() => handleCollectReward(task.id)}
+                          onClick={() => handleCollectReward(task.id, false)}
                           className="w-full flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-medium bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
                         >
                           <Coins className="w-4 h-4 mr-1.5" />
@@ -148,16 +156,37 @@ export const TaskList = ({ onDataChange }) => {
                     </div>
                   )}
                   
-                  {task.requiresReview && task.nextReviewDate && task.nextReviewDate <= Date.now() && (
-                    <button
-                      onClick={() => {
-                        updateTaskReview(task.id);
-                        onDataChange?.();
-                      }}
-                      className="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 text-sm font-medium transition-colors"
-                    >
-                      Review
-                    </button>
+                  {task.requiresReview && (
+                    <>
+                      {/* Show Review button if review is due */}
+                      {task.nextReviewDate && task.nextReviewDate <= Date.now() && !task.isInReviewWaiting && (
+                        <button
+                          onClick={() => {
+                            updateTaskReview(task.id);
+                            onDataChange?.();
+                          }}
+                          className="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 text-sm font-medium transition-colors"
+                        >
+                          Review
+                        </button>
+                      )}
+                      {/* Show review reward progress if in waiting period */}
+                      {task.isInReviewWaiting && !task.reviewRewarded && (
+                        <div className="min-w-[200px]">
+                          {calculateRewardProgress(task.reviewCompletedAt) < 100 ? (
+                            <RewardProgress completedAt={task.reviewCompletedAt} />
+                          ) : (
+                            <button
+                              onClick={() => handleCollectReward(task.id, true)}
+                              className="w-full flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-medium bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
+                            >
+                              <Coins className="w-4 h-4 mr-1.5" />
+                              Collect Review Reward
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

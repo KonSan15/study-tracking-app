@@ -53,7 +53,7 @@ export const TaskForm = () => {
         <div className="md:col-span-1">
           <h3 className="text-lg font-medium leading-6 text-gray-900">Add New Task</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Create a new study task with optional weekly review.
+            Create a new study task with optional review.
           </p>
         </div>
         <div className="mt-5 md:mt-0 md:col-span-2">
@@ -110,7 +110,7 @@ export const TaskForm = () => {
                   className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 <label htmlFor="requiresReview" className="ml-2 block text-sm text-gray-700">
-                  Requires weekly review
+                  Requires review
                 </label>
               </div>
 
